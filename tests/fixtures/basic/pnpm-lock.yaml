@@ -1,0 +1,9 @@
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    dependencies:
+      vite:
+        specifier: ^7.0.0
+        version: 7.0.0

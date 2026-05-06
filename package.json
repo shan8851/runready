@@ -1,0 +1,54 @@
+{
+  "name": "runready",
+  "version": "0.1.0",
+  "description": "A polished local dev preflight CLI for checking whether a repo is ready to run.",
+  "type": "module",
+  "bin": {
+    "runready": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/cli.ts",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "cli",
+    "environment",
+    "preflight",
+    "env",
+    "developer-tools"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@babel/parser": "^7.28.5",
+    "@babel/types": "^7.29.0",
+    "boxen": "^8.0.1",
+    "commander": "^14.0.2",
+    "dotenv": "^17.2.3",
+    "execa": "^9.6.0",
+    "fast-glob": "^3.3.3",
+    "picocolors": "^1.1.1",
+    "semver": "^7.7.3",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.1",
+    "@types/semver": "^7.7.1",
+    "eslint": "^9.39.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vitest": "^4.0.8"
+  }
+}
