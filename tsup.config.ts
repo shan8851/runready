@@ -7,5 +7,6 @@ export default defineConfig({
   clean: true,
   dts: true,
   entry: ["src/cli.ts"],
+  target: "node20",
   format: ["esm"]
 });

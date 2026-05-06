@@ -4,6 +4,19 @@ import { detectEnvSchemaRequirements, detectEnvUsage } from "../detect/envUsage.
 
 import type { CheckResult, EnvFile, ProjectContext } from "../types.js";
 
+const ambientEnvKeys = new Set([
+  "CI",
+  "DEBUG",
+  "FORCE_COLOR",
+  "HOME",
+  "NO_COLOR",
+  "NODE_ENV",
+  "PATH",
+  "PWD",
+  "SHELL",
+  "USER"
+]);
+
 const uniqueSorted = (values: string[]): string[] => Array.from(new Set(values)).sort();
 
 const keysFromEnvFile = (envFile: EnvFile | undefined): string[] =>
@@ -87,6 +100,7 @@ export const runEnvChecks = async (context: ProjectContext): Promise<CheckResult
   const exampleFiles = envFiles.filter((envFile) => envFile.kind === "example");
   const allEnvKeys = new Set(envFiles.flatMap(keysFromEnvFile));
   const envUsage = await detectEnvUsage(context.rootPath, context.sourceFiles);
+  const projectEnvUsage = envUsage.filter((usage) => !ambientEnvKeys.has(usage.key));
   const schemaRequirements = await detectEnvSchemaRequirements(context.rootPath, context.sourceFiles);
   const requiredSchemaKeys = uniqueSorted(
     schemaRequirements.filter((requirement) => requirement.required).map((requirement) => requirement.key)
@@ -97,9 +111,13 @@ export const runEnvChecks = async (context: ProjectContext): Promise<CheckResult
   const localKeys = new Set(localFiles.flatMap(keysFromEnvFile));
   const missingSchemaKeys = requiredSchemaKeys.filter((key) => !localKeys.has(key));
   const undocumentedSourceKeys = uniqueSorted(
-    envUsage
+    projectEnvUsage
       .map((usage) => usage.key)
-      .filter((key) => !allEnvKeys.has(key) && !requiredSchemaKeys.includes(key) && !optionalSchemaKeys.includes(key))
+      .filter((key) =>
+        !allEnvKeys.has(key) &&
+        !requiredSchemaKeys.includes(key) &&
+        !optionalSchemaKeys.includes(key)
+      )
   );
   const localOnlyKeys = uniqueSorted(
     localFiles
@@ -116,7 +134,7 @@ export const runEnvChecks = async (context: ProjectContext): Promise<CheckResult
     {
       id: "env.files",
       category: "env",
-      status: envFiles.length > 0 ? "pass" : "warn",
+      status: envFiles.length > 0 ? "pass" : "skip",
       title:
         envFiles.length > 0
           ? `Detected ${envFiles.length} env ${envFiles.length === 1 ? "file" : "files"}`
@@ -168,20 +186,20 @@ export const runEnvChecks = async (context: ProjectContext): Promise<CheckResult
     {
       id: "env.source",
       category: "env",
-      status: envUsage.length > 0 ? "pass" : "skip",
+      status: projectEnvUsage.length > 0 ? "pass" : "skip",
       title:
-        envUsage.length > 0
-          ? `Detected ${uniqueSorted(envUsage.map((usage) => usage.key)).length} env keys in source`
+        projectEnvUsage.length > 0
+          ? `Detected ${uniqueSorted(projectEnvUsage.map((usage) => usage.key)).length} env keys in source`
           : "No static env usage detected"
     },
     {
       id: "env.source.undocumented",
       category: "env",
-      status: undocumentedSourceKeys.length > 0 ? "warn" : envUsage.length > 0 ? "pass" : "skip",
+      status: undocumentedSourceKeys.length > 0 ? "warn" : projectEnvUsage.length > 0 ? "pass" : "skip",
       title:
         undocumentedSourceKeys.length > 0
           ? `${undocumentedSourceKeys.length} source env ${undocumentedSourceKeys.length === 1 ? "key is" : "keys are"} undocumented`
-          : envUsage.length > 0
+          : projectEnvUsage.length > 0
             ? "Source env usage is documented"
             : "Source env documentation check skipped",
       detail: undocumentedSourceKeys.length > 0 ? summarizeKeys(undocumentedSourceKeys) : undefined,

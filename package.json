@@ -11,7 +11,7 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=24"
+    "node": ">=20"
   },
   "scripts": {
     "build": "tsup",
@@ -42,7 +42,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
-    "@types/node": "^24.10.1",
+    "@types/node": "^20.19.24",
     "@types/semver": "^7.7.1",
     "eslint": "^9.39.1",
     "tsup": "^8.5.1",

@@ -13,6 +13,8 @@ const categoryTitles: Record<CheckCategory, string> = {
   scripts: "Scripts"
 };
 
+const categoryOrder: CheckCategory[] = ["repo", "runtime", "deps", "env", "scripts", "docker", "ports"];
+
 const statusWeight = {
   fail: 0,
   warn: 1,
@@ -52,8 +54,10 @@ const colorTitle = (check: CheckResult): string => {
   return check.status === "skip" ? pc.dim(check.title) : check.title;
 };
 
+const statusLabel = (check: CheckResult): string => `${colorStatus(check.status)} ${colorTitle(check)}`;
+
 const formatCheck = (check: CheckResult, verbose: boolean): string => {
-  const primaryLine = `${colorStatus(check.status)} ${colorTitle(check)}`;
+  const primaryLine = statusLabel(check);
   const detailLines = [
     check.detail,
     verbose && check.expected !== undefined ? `Expected: ${check.expected}` : undefined,
@@ -67,15 +71,9 @@ const formatCheck = (check: CheckResult, verbose: boolean): string => {
 };
 
 const groupChecks = (checks: CheckResult[]): Array<[CheckCategory, CheckResult[]]> =>
-  Array.from(
-    checks
-      .reduce((groups, check) => {
-        const existingChecks = groups.get(check.category) ?? [];
-
-        return new Map(groups).set(check.category, [...existingChecks, check]);
-      }, new Map<CheckCategory, CheckResult[]>())
-      .entries()
-  );
+  categoryOrder
+    .map((category) => [category, checks.filter((check) => check.category === category)] as [CheckCategory, CheckResult[]])
+    .filter(([, categoryChecks]) => categoryChecks.length > 0);
 
 const renderGroup = ([category, checks]: [CheckCategory, CheckResult[]], verbose: boolean): string =>
   boxen(
@@ -104,7 +102,74 @@ const renderNextSteps = (nextSteps: string[]): string =>
         ...nextSteps.map((step, index) => `${pc.cyan(`${index + 1}.`)} ${step}`)
       ].join("\n");
 
-export const renderHumanReport = (report: RunReport, verbose: boolean): string => {
+const compactCategoryStatus = (checks: CheckResult[]): string => {
+  if (checks.some((check) => check.status === "fail")) {
+    return pc.red("fail");
+  }
+
+  if (checks.some((check) => check.status === "warn")) {
+    return pc.yellow("warn");
+  }
+
+  if (checks.every((check) => check.status === "skip")) {
+    return pc.dim("skip");
+  }
+
+  return pc.green("ok");
+};
+
+const renderCompactReport = (report: RunReport): string => {
+  const summaryText = `${report.summary.fail} fail  ${report.summary.warn} warn  ${report.summary.pass} pass  ${report.summary.skip} skip`;
+  const summaryColor = report.summary.fail > 0 ? pc.red : report.summary.warn > 0 ? pc.yellow : pc.green;
+  const readinessLabel =
+    report.summary.fail > 0
+      ? pc.red("blocked")
+      : report.summary.warn > 0
+        ? pc.yellow("ready with warnings")
+        : pc.green("ready");
+  const notableChecks = report.checks
+    .filter((check) => check.status === "fail" || check.status === "warn")
+    .sort((firstCheck, secondCheck) => statusWeight[firstCheck.status] - statusWeight[secondCheck.status]);
+  const categoryLine = groupChecks(report.checks)
+    .map(([category, checks]) => `${categoryTitles[category]} ${compactCategoryStatus(checks)}`)
+    .join(pc.dim("  ·  "));
+  const notableLines =
+    notableChecks.length === 0
+      ? [pc.green("✓ Everything notable looks ready.")]
+      : notableChecks.slice(0, 8).flatMap((check) => [
+          statusLabel(check),
+          check.detail === undefined ? undefined : pc.dim(`  ${check.detail}`)
+        ]).filter((line): line is string => line !== undefined);
+  const hiddenCount = notableChecks.length - 8;
+  const hiddenLine = hiddenCount > 0 ? pc.dim(`…and ${hiddenCount} more. Run runready doctor for full detail.`) : undefined;
+
+  return [
+    boxen(
+      [
+        `${pc.bold("runready")} ${readinessLabel}`,
+        `Project: ${pc.bold(report.project.name)}  ${pc.dim(report.project.root)}`,
+        `Summary: ${summaryColor(summaryText)}`
+      ].join("\n"),
+      {
+        borderColor: report.summary.fail > 0 ? "red" : report.summary.warn > 0 ? "yellow" : "green",
+        borderStyle: "round",
+        padding: 1
+      }
+    ),
+    categoryLine,
+    "",
+    pc.bold("Notable"),
+    ...notableLines,
+    hiddenLine,
+    "",
+    renderNextSteps(report.nextSteps),
+    notableChecks.length > 0 ? pc.dim("Run runready doctor for the full diagnostic view.") : undefined
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join("\n");
+};
+
+const renderDoctorReport = (report: RunReport, verbose: boolean): string => {
   const summaryLine = `${report.summary.pass} pass  ${report.summary.warn} warn  ${report.summary.fail} fail  ${report.summary.skip} skip`;
   const intro = [
     pc.cyan(runreadyHeader),
@@ -121,3 +186,6 @@ export const renderHumanReport = (report: RunReport, verbose: boolean): string =
     renderNextSteps(report.nextSteps)
   ].join("\n\n");
 };
+
+export const renderHumanReport = (report: RunReport, verbose: boolean): string =>
+  verbose ? renderDoctorReport(report, verbose) : renderCompactReport(report);

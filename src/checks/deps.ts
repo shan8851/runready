@@ -1,11 +1,43 @@
 import path from "node:path";
 
-import { getModifiedTime, pathExists } from "../utils/fileSystem.js";
+import { pathExists } from "../utils/fileSystem.js";
 
-import type { CheckResult, ProjectContext } from "../types.js";
+import type { CheckResult, PackageJson, ProjectContext } from "../types.js";
 
 const installCommandForPackageManager = (packageManager: string | undefined): string =>
   packageManager === undefined ? "Install dependencies with the project package manager." : `${packageManager} install`;
+
+const declaredDependencyNames = (packageJson: PackageJson): string[] =>
+  Array.from(
+    new Set([
+      ...Object.keys(packageJson.dependencies ?? {}),
+      ...Object.keys(packageJson.devDependencies ?? {})
+    ])
+  ).sort();
+
+const dependencyPath = (rootPath: string, dependencyName: string): string =>
+  path.join(rootPath, "node_modules", ...dependencyName.split("/"));
+
+const missingDeclaredDependencies = async (
+  context: ProjectContext,
+  dependencyNames: string[]
+): Promise<string[]> => {
+  const dependencyChecks = await Promise.all(
+    dependencyNames.map(async (dependencyName) => ({
+      dependencyName,
+      exists: await pathExists(dependencyPath(context.rootPath, dependencyName))
+    }))
+  );
+
+  return dependencyChecks
+    .filter((dependencyCheck) => !dependencyCheck.exists)
+    .map((dependencyCheck) => dependencyCheck.dependencyName);
+};
+
+const summarizeDependencies = (dependencyNames: string[]): string =>
+  dependencyNames.length <= 8
+    ? dependencyNames.join(", ")
+    : `${dependencyNames.slice(0, 8).join(", ")} and ${dependencyNames.length - 8} more`;
 
 export const runDependencyChecks = async (context: ProjectContext): Promise<CheckResult[]> => {
   if (context.packageJson === undefined) {
@@ -21,15 +53,16 @@ export const runDependencyChecks = async (context: ProjectContext): Promise<Chec
 
   const nodeModulesPath = path.join(context.rootPath, "node_modules");
   const nodeModulesExists = await pathExists(nodeModulesPath);
-  const packageJsonMtime = await getModifiedTime(path.join(context.rootPath, "package.json"));
-  const lockfileMtimes = await Promise.all(context.lockfiles.map((lockfile) => getModifiedTime(lockfile.path)));
-  const newestManifestMtime = Math.max(packageJsonMtime ?? 0, ...lockfileMtimes.map((mtime) => mtime ?? 0));
-  const nodeModulesMtime = await getModifiedTime(nodeModulesPath);
   const lockfilePackageManagers = context.lockfiles.map((lockfile) => lockfile.packageManager);
   const hasPackageManagerConflict =
     context.packageManagerField !== undefined &&
     lockfilePackageManagers.length > 0 &&
     !lockfilePackageManagers.includes(context.packageManagerField);
+  const dependencyNames = declaredDependencyNames(context.packageJson);
+  const missingDependencies =
+    context.hasYarnPnp || !nodeModulesExists
+      ? []
+      : await missingDeclaredDependencies(context, dependencyNames);
 
   return [
     {
@@ -76,26 +109,31 @@ export const runDependencyChecks = async (context: ProjectContext): Promise<Chec
           : installCommandForPackageManager(context.inferredPackageManager)
     },
     {
-      id: "deps.stale-install",
+      id: "deps.declared-installed",
       category: "deps",
       status:
-        context.hasYarnPnp || !nodeModulesExists || nodeModulesMtime === undefined
+        context.hasYarnPnp || !nodeModulesExists || dependencyNames.length === 0
           ? "skip"
-          : newestManifestMtime > nodeModulesMtime
+          : missingDependencies.length > 0
             ? "warn"
             : "pass",
       title:
-        context.hasYarnPnp || !nodeModulesExists || nodeModulesMtime === undefined
-          ? "Install freshness check skipped"
-          : newestManifestMtime > nodeModulesMtime
-            ? "Dependencies may be stale"
-            : "Dependencies look current",
+        context.hasYarnPnp
+          ? "Declared dependency check skipped for Yarn PnP"
+          : !nodeModulesExists
+            ? "Declared dependency check skipped"
+            : dependencyNames.length === 0
+              ? "No declared dependencies to check"
+              : missingDependencies.length > 0
+                ? `${missingDependencies.length} declared ${missingDependencies.length === 1 ? "dependency is" : "dependencies are"} missing from node_modules`
+                : "Declared dependencies are present in node_modules",
+      detail: missingDependencies.length > 0 ? summarizeDependencies(missingDependencies) : undefined,
       suggestion:
-        !context.hasYarnPnp && nodeModulesExists && nodeModulesMtime !== undefined && newestManifestMtime > nodeModulesMtime
-          ? installCommandForPackageManager(context.inferredPackageManager)
+        missingDependencies.length > 0
+          ? "Run the project install command to restore missing dependency links."
           : undefined,
       nextStep:
-        !context.hasYarnPnp && nodeModulesExists && nodeModulesMtime !== undefined && newestManifestMtime > nodeModulesMtime
+        missingDependencies.length > 0
           ? installCommandForPackageManager(context.inferredPackageManager)
           : undefined
     }

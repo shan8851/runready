@@ -140,8 +140,14 @@ const runEnvSyncAction = async (
 
   process.stdout.write(`${output}\n`);
 
+  if (plan.conflicts.length > 0) {
+    process.stderr.write("Env sync blocked because conflicts need to be resolved first.\n");
+    process.exitCode = 1;
+    return;
+  }
+
   if (plan.changes.length === 0 || options.dryRun === true) {
-    process.exitCode = plan.conflicts.length > 0 ? 1 : 0;
+    process.exitCode = 0;
     return;
   }
 

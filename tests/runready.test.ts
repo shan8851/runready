@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,7 +10,9 @@ import { runEnvChecks } from "../src/checks/env.js";
 import { detectProject } from "../src/detect/project.js";
 import { executeCheck } from "../src/cli.js";
 
-const fixtureRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
+const testRoot = path.dirname(fileURLToPath(import.meta.url));
+const fixtureRoot = path.join(testRoot, "fixtures");
+const projectRoot = path.resolve(testRoot, "..");
 
 const fixturePath = (name: string): string => path.join(fixtureRoot, name);
 
@@ -76,6 +78,13 @@ describe("runready", () => {
     );
   });
 
+  it("ignores test files and fixtures when scanning a real repo", async () => {
+    const context = await detectProject(projectRoot);
+
+    expect(context.sourceFiles.some((sourcePath) => sourcePath.includes("tests/fixtures"))).toBe(false);
+    expect(context.sourceFiles.some((sourcePath) => sourcePath.endsWith("runready.test.ts"))).toBe(false);
+  });
+
   it("plans env sync without overwriting existing values or leaking local values into examples", async () => {
     await withTempFixture("sync", async (tempPath) => {
       const context = await detectProject(tempPath);
@@ -103,6 +112,24 @@ describe("runready", () => {
       expect(envContent).toContain("REDIS_URL=");
       expect(exampleContent).toContain("LOCAL_ONLY_SECRET=");
       expect(exampleContent).not.toContain("super-secret");
+    });
+  });
+
+  it("reports env sync conflicts so callers can block writes", async () => {
+    await withTempFixture("sync", async (tempPath) => {
+      await writeFile(path.join(tempPath, ".env"), "DATABASE_URL=one\nDATABASE_URL=two\n", "utf8");
+
+      const context = await detectProject(tempPath);
+      const plan = await createEnvSyncPlan(context);
+
+      expect(plan.conflicts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            filePath: path.join(tempPath, ".env"),
+            title: "Duplicate keys in .env"
+          })
+        ])
+      );
     });
   });
 

@@ -29,7 +29,7 @@ runready env sync --dry-run
 
 ## Development
 
-This CLI requires Node `>=24`.
+This CLI requires Node `>=20`.
 
 ```bash
 pnpm install

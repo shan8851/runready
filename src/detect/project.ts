@@ -38,7 +38,11 @@ const sourceIgnores = [
   "**/.next/**",
   "**/coverage/**",
   "**/.turbo/**",
-  "**/.git/**"
+  "**/.git/**",
+  "**/tests/fixtures/**",
+  "**/__fixtures__/**",
+  "**/*.test.{js,jsx,ts,tsx,mjs,cjs,mts,cts}",
+  "**/*.spec.{js,jsx,ts,tsx,mjs,cjs,mts,cts}"
 ];
 
 const dockerFileNames = ["Dockerfile", "Dockerfile.dev"];
@@ -116,8 +120,11 @@ export const detectProject = async (targetPathInput: string): Promise<ProjectCon
   const targetPath = path.resolve(targetPathInput);
   const gitRoot = await detectGitRoot(targetPath);
   const packageJsonPathFromUp = await findUp(targetPath, "package.json");
+  const hasMarkerAtTarget = await hasProjectMarkerAtTarget(targetPath);
   const rootPath =
-    gitRoot ?? ((await hasProjectMarkerAtTarget(targetPath)) ? targetPath : path.dirname(packageJsonPathFromUp ?? path.join(targetPath, "package.json")));
+    hasMarkerAtTarget
+      ? targetPath
+      : gitRoot ?? path.dirname(packageJsonPathFromUp ?? path.join(targetPath, "package.json"));
   const packageJsonPath = path.join(rootPath, "package.json");
   const packageJson = await readJsonFile(packageJsonPath, packageJsonSchema);
   const lockfiles = await detectLockfiles(rootPath);
