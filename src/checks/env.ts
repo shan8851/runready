@@ -8,13 +8,16 @@ const ambientEnvKeys = new Set([
   "CI",
   "DEBUG",
   "FORCE_COLOR",
+  "APPDATA",
   "HOME",
+  "LOCALAPPDATA",
   "NO_COLOR",
   "NODE_ENV",
   "PATH",
   "PWD",
   "SHELL",
-  "USER"
+  "USER",
+  "XDG_CACHE_HOME"
 ]);
 
 const uniqueSorted = (values: string[]): string[] => Array.from(new Set(values)).sort();

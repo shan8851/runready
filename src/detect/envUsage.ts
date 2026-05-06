@@ -19,7 +19,7 @@ const parserPlugins = [
   "decorators-legacy"
 ] as const;
 
-const knownEnvSchemaFilePattern = /(^|\/)(env|environment|config)\.(c|m)?[tj]sx?$/;
+const knownEnvSchemaFilePattern = /(^|\/)(env|environment)\.(c|m)?[tj]sx?$/;
 
 const keyFromMemberProperty = (
   property: Node | null | undefined,
@@ -139,7 +139,7 @@ const scanSourceFileForSchemaRequirements = async (
 ): Promise<EnvSchemaRequirement[]> => {
   const content = await readTextFile(sourcePath);
 
-  if (content === undefined || (!content.includes("createEnv") && !content.includes("z.object"))) {
+  if (content === undefined || !content.includes("createEnv")) {
     return [];
   }
 
