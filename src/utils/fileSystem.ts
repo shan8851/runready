@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { access, readFile, stat, writeFile, appendFile } from "node:fs/promises";
+import { access, appendFile, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { z } from "zod";
@@ -35,29 +35,28 @@ export const readJsonFile = async <T>(
     return undefined;
   }
 
-  return schema.safeParse(JSON.parse(content)).data;
+  try {
+    return schema.safeParse(JSON.parse(content)).data;
+  } catch {
+    return undefined;
+  }
 };
 
 export const toPosixRelativePath = (rootPath: string, filePath: string): string =>
   path.relative(rootPath, filePath).split(path.sep).join("/");
 
-export const findUp = async (startPath: string, fileName: string): Promise<string | undefined> => {
-  let currentPath = path.resolve(startPath);
+const findUpFrom = async (currentPath: string, fileName: string): Promise<string | undefined> => {
+  const candidatePath = path.join(currentPath, fileName);
+  const exists = await pathExists(candidatePath);
 
-  while (true) {
-    const candidatePath = path.join(currentPath, fileName);
-    const exists = await pathExists(candidatePath);
-
-    if (exists) {
-      return candidatePath;
-    }
-
-    const parentPath = path.dirname(currentPath);
-
-    if (parentPath === currentPath) {
-      return undefined;
-    }
-
-    currentPath = parentPath;
+  if (exists) {
+    return candidatePath;
   }
+
+  const parentPath = path.dirname(currentPath);
+
+  return parentPath === currentPath ? undefined : findUpFrom(parentPath, fileName);
 };
+
+export const findUp = async (startPath: string, fileName: string): Promise<string | undefined> =>
+  findUpFrom(path.resolve(startPath), fileName);

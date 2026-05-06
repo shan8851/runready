@@ -42,17 +42,14 @@ const colorStatus = (status: CheckResult["status"]): string => {
   return markerByStatus[status];
 };
 
-const colorTitle = (check: CheckResult): string => {
-  if (check.status === "fail") {
-    return pc.red(check.title);
-  }
-
-  if (check.status === "warn") {
-    return pc.yellow(check.title);
-  }
-
-  return check.status === "skip" ? pc.dim(check.title) : check.title;
+const titleColorByStatus: Record<CheckResult["status"], (value: string) => string> = {
+  fail: pc.red,
+  pass: (value) => value,
+  skip: pc.dim,
+  warn: pc.yellow
 };
+
+const colorTitle = (check: CheckResult): string => titleColorByStatus[check.status](check.title);
 
 const statusLabel = (check: CheckResult): string => `${colorStatus(check.status)} ${colorTitle(check)}`;
 
@@ -75,6 +72,14 @@ const groupChecks = (checks: CheckResult[]): Array<[CheckCategory, CheckResult[]
     .map((category) => [category, checks.filter((check) => check.category === category)] as [CheckCategory, CheckResult[]])
     .filter(([, categoryChecks]) => categoryChecks.length > 0);
 
+const borderColorForChecks = (checks: CheckResult[]): "green" | "red" | "yellow" => {
+  if (checks.some((check) => check.status === "fail")) {
+    return "red";
+  }
+
+  return checks.some((check) => check.status === "warn") ? "yellow" : "green";
+};
+
 const renderGroup = ([category, checks]: [CheckCategory, CheckResult[]], verbose: boolean): string =>
   boxen(
     checks
@@ -82,11 +87,7 @@ const renderGroup = ([category, checks]: [CheckCategory, CheckResult[]], verbose
       .map((check) => formatCheck(check, verbose))
       .join("\n"),
     {
-      borderColor: checks.some((check) => check.status === "fail")
-        ? "red"
-        : checks.some((check) => check.status === "warn")
-          ? "yellow"
-          : "green",
+      borderColor: borderColorForChecks(checks),
       borderStyle: "round",
       padding: 1,
       title: categoryTitles[category],
@@ -118,37 +119,59 @@ const compactCategoryStatus = (checks: CheckResult[]): string => {
   return pc.green("ok");
 };
 
-const renderCompactReport = (report: RunReport): string => {
-  const summaryText = `${report.summary.fail} fail  ${report.summary.warn} warn  ${report.summary.pass} pass  ${report.summary.skip} skip`;
-  const summaryColor = report.summary.fail > 0 ? pc.red : report.summary.warn > 0 ? pc.yellow : pc.green;
-  const readinessLabel =
-    report.summary.fail > 0
-      ? pc.red("blocked")
-      : report.summary.warn > 0
-        ? pc.yellow("ready with warnings")
-        : pc.green("ready");
-  const notableChecks = report.checks
+const summaryColorForReport = (report: RunReport): ((value: string) => string) => {
+  if (report.summary.fail > 0) {
+    return pc.red;
+  }
+
+  return report.summary.warn > 0 ? pc.yellow : pc.green;
+};
+
+const readinessLabelForReport = (report: RunReport): string => {
+  if (report.summary.fail > 0) {
+    return pc.red("blocked");
+  }
+
+  return report.summary.warn > 0 ? pc.yellow("ready with warnings") : pc.green("ready");
+};
+
+const notableChecksForReport = (report: RunReport): CheckResult[] =>
+  report.checks
     .filter((check) => check.status === "fail" || check.status === "warn")
     .sort((firstCheck, secondCheck) => statusWeight[firstCheck.status] - statusWeight[secondCheck.status]);
+
+const renderNotableLines = (notableChecks: CheckResult[]): string[] => {
+  if (notableChecks.length === 0) {
+    return [pc.green("✓ Everything notable looks ready") + "."];
+  }
+
+  const visibleLines = notableChecks
+    .slice(0, 8)
+    .flatMap((check) => [
+      statusLabel(check),
+      check.detail === undefined ? undefined : pc.dim(`  ${check.detail}`)
+    ])
+    .filter((line): line is string => line !== undefined);
+  const hiddenCount = notableChecks.length - 8;
+
+  return hiddenCount > 0
+    ? [...visibleLines, pc.dim(`…and ${hiddenCount} more. Run runready doctor for full detail.`)]
+    : visibleLines;
+};
+
+const renderCompactReport = (report: RunReport): string => {
+  const summaryText = `${report.summary.fail} fail  ${report.summary.warn} warn  ${report.summary.pass} pass  ${report.summary.skip} skip`;
   const categoryLine = groupChecks(report.checks)
     .map(([category, checks]) => `${categoryTitles[category]} ${compactCategoryStatus(checks)}`)
     .join(pc.dim("  ·  "));
-  const notableLines =
-    notableChecks.length === 0
-      ? [pc.green("✓ Everything notable looks ready.")]
-      : notableChecks.slice(0, 8).flatMap((check) => [
-          statusLabel(check),
-          check.detail === undefined ? undefined : pc.dim(`  ${check.detail}`)
-        ]).filter((line): line is string => line !== undefined);
-  const hiddenCount = notableChecks.length - 8;
-  const hiddenLine = hiddenCount > 0 ? pc.dim(`…and ${hiddenCount} more. Run runready doctor for full detail.`) : undefined;
+  const notableChecks = notableChecksForReport(report);
 
   return [
     boxen(
       [
-        `${pc.bold("runready")} ${readinessLabel}`,
+        `${pc.bold("runready")} ${readinessLabelForReport(report)}`,
         `Project: ${pc.bold(report.project.name)}  ${pc.dim(report.project.root)}`,
-        `Summary: ${summaryColor(summaryText)}`
+        `Summary: ${summaryColorForReport(report)(summaryText)}`
       ].join("\n"),
       {
         borderColor: report.summary.fail > 0 ? "red" : report.summary.warn > 0 ? "yellow" : "green",
@@ -159,8 +182,7 @@ const renderCompactReport = (report: RunReport): string => {
     categoryLine,
     "",
     pc.bold("Notable"),
-    ...notableLines,
-    hiddenLine,
+    ...renderNotableLines(notableChecks),
     "",
     renderNextSteps(report.nextSteps),
     notableChecks.length > 0 ? pc.dim("Run runready doctor for the full diagnostic view.") : undefined

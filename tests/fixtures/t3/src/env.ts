@@ -1,5 +1,20 @@
-import { createEnv } from "@t3-oss/env-nextjs";
-import { z } from "zod";
+type SchemaChain = {
+  default: (value: string) => SchemaChain;
+  optional: () => SchemaChain;
+  url: () => SchemaChain;
+};
+
+const schemaChain: SchemaChain = {
+  default: () => schemaChain,
+  optional: () => schemaChain,
+  url: () => schemaChain
+};
+
+const z = {
+  string: (): SchemaChain => schemaChain
+};
+
+const createEnv = <Config>(config: Config): Config => config;
 
 export const env = createEnv({
   server: {
