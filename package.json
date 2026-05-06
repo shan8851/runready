@@ -1,33 +1,56 @@
 {
-  "name": "runready",
+  "name": "@shan8851/runready",
   "version": "0.1.0",
-  "description": "A polished local dev preflight CLI for checking whether a repo is ready to run.",
+  "description": "Local dev preflight CLI that checks whether a repo is ready to run.",
+  "license": "MIT",
+  "author": "Shan <https://github.com/shan8851>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shan8851/runready.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shan8851/runready/issues"
+  },
+  "homepage": "https://github.com/shan8851/runready#readme",
+  "keywords": [
+    "cli",
+    "developer-tools",
+    "dev-environment",
+    "environment",
+    "env",
+    "preflight",
+    "repo-health",
+    "agents",
+    "ai-agent",
+    "openclaw"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.23.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
   "type": "module",
   "bin": {
     "runready": "./dist/cli.js"
   },
   "files": [
     "dist",
-    "README.md"
+    "docs/assets",
+    "README.md",
+    "LICENSE"
   ],
-  "engines": {
-    "node": ">=20"
-  },
   "scripts": {
     "build": "tsup",
     "dev": "tsx src/cli.ts",
     "lint": "eslint .",
+    "prepack": "pnpm run build",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "validate": "pnpm run typecheck && pnpm test && pnpm run lint && pnpm build"
   },
-  "keywords": [
-    "cli",
-    "environment",
-    "preflight",
-    "env",
-    "developer-tools"
-  ],
-  "license": "MIT",
   "dependencies": {
     "@babel/parser": "^7.28.5",
     "@babel/types": "^7.29.0",
